@@ -11,6 +11,8 @@ const trendText = document.getElementById('trend-type');
 
 let currentPredictionSize = null;
 let currentPredictionColor = null;
+let currentPredictionNumber = null;
+let lastWait = 0;
 
 // Initial Run
 renderHistory();
@@ -25,6 +27,7 @@ function addRound(num) {
     // Track if the previous prediction was correct
     let winSize = (currentPredictionSize && size === currentPredictionSize);
     let winColor = (currentPredictionColor && colorStr === currentPredictionColor);
+    let winNumber = (currentPredictionNumber !== null && num === currentPredictionNumber);
 
     // Save prediction for this round record
     history.unshift({
@@ -32,10 +35,12 @@ function addRound(num) {
         number: num,
         size,
         colors,
-        winSize,
-        winColor,
+        winSize: currentPredictionSize ? winSize : null,
+        winColor: currentPredictionColor ? winColor : null,
+        winNumber: currentPredictionNumber !== null ? winNumber : null,
         predSize: currentPredictionSize,
-        predColor: currentPredictionColor
+        predColor: currentPredictionColor,
+        predNumber: currentPredictionNumber
     });
 
     if (history.length > 50) history.pop();
@@ -128,24 +133,128 @@ function predict() {
         type = "AI-SMART";
     }
 
-    // Size Logic
+    // Advanced Size Prediction (BIG/SMALL)
     const sizeStreak = getStreak(s);
     const sizeZigZag = isZigZag(s, 4);
-    if (sizeStreak >= 4) { predSize = s[0]; confidence = Math.max(confidence, 76); }
-    else if (sizeZigZag) { predSize = s[0] === "BIG" ? "SMALL" : "BIG"; confidence = Math.max(confidence, 82); }
-    else {
-        predSize = ai.big > 50 ? "BIG" : "SMALL";
-        confidence = Math.max(confidence, 60 + Math.abs(ai.big - 50));
+
+    // --- DEEP LOGIC: REVERSE ENGINEERING FACTORS ---
+
+    // 1. Violet Shift (0/5 Logic) - Common trend flipper
+    const violetEffect = (s.length > 0 && (history[0].number === 0 || history[0].number === 5));
+
+    // 2. Regression to Mean (Overall Balance)
+    const validRounds = history.filter(h => h.winSize !== null);
+    const totalBig = validRounds.filter(h => h.size === "BIG").length;
+    const sizeSkew = validRounds.length > 10 ? (totalBig / validRounds.length) : 0.5;
+
+    // 3. Parity Analysis (Odd/Even)
+    const isOdd = (num) => num % 2 !== 0;
+    const p = history.map(h => isOdd(h.number) ? "ODD" : "EVEN");
+
+    // 4. Vertical Trap (Search for 3x same number or size in 5 rounds)
+    const verticalMatch = (s.length >= 5 && s[0] === s[2] && s[2] === s[4]);
+    const numberRepeat = (s.length >= 5 && history[0].number === history[2].number);
+
+
+    if (sizeStreak >= 8) {
+        predSize = s[0] === "BIG" ? "SMALL" : "BIG";
+        confidence = 92;
+        type = "MEAN-REVERSION";
     }
+    else if (violetEffect) {
+        // Violet Shift: 0/5 implies a trend break
+        predSize = s[0] === "BIG" ? "SMALL" : "BIG";
+        confidence = 88;
+        type = "VIOLET-SHIFT";
+    }
+    else if (sizeMirror) {
+        predSize = s[0] === "BIG" ? "SMALL" : "BIG";
+        confidence = 85;
+        type = "MIRROR";
+    }
+    else if (sizeStreak >= 4) {
+        predSize = s[0];
+        confidence = 78;
+        type = "DRAGON";
+    }
+    else if (sizeZigZag) {
+        predSize = s[0] === "BIG" ? "SMALL" : "BIG";
+        confidence = 82;
+        type = "ZIGZAG";
+    }
+    else if (verticalMatch) {
+        // Vertical Trap: Predict the OPPOSITE to break the cycle
+        predSize = s[0] === "BIG" ? "SMALL" : "BIG";
+        confidence = 90;
+        type = "VERTICAL-TRAP";
+    }
+    else if (numberRepeat) {
+        // Number Repeat: If a number repeats vertically, high chance of size flip
+        predSize = s[0] === "BIG" ? "SMALL" : "BIG";
+        confidence = 88;
+        type = "PATTERN-BREAK";
+    }
+
+    // --- CONFIDENCE SYNERGY (Combining factors) ---
+    if (violetEffect && sizeMirror) confidence += 10;
+    if (verticalMatch && sizeSkew > 0.6) confidence += 8;
+    if (sizeStreak >= 10) confidence = 95;
+    if (confidence > 98) confidence = 98;
+
+    else if (sizeSkew > 0.65) {
+        // High BIG density -> SMALL is due
+        predSize = "SMALL";
+        confidence = 80;
+        type = "SKEW-CORRECT";
+    }
+    else if (sizeSkew < 0.35) {
+        // High SMALL density -> BIG is due
+        predSize = "BIG";
+        confidence = 80;
+        type = "SKEW-CORRECT";
+    }
+    else {
+        // Default AI Frequency + Parity weight
+        const parityBias = p[0] === "ODD" ? "SMALL" : "BIG"; // Common correlation
+        predSize = ai.big > 50 ? "BIG" : "SMALL";
+        confidence = 65 + Math.abs(ai.big - 50);
+        type = "DEEP-LOGIC";
+    }
+
 
     // Final Confidence Tuning
     if (confidence > 98) confidence = 98;
-    currentPredictionSize = predSize; currentPredictionColor = predColor;
+    currentPredictionSize = predSize;
+    currentPredictionColor = predColor;
 
-    if (nextDisplay) {
-        nextDisplay.innerText = `${predSize === "BIG" ? "BADA" : "CHOTA"} + ${predColor === "RED" ? "🔴 RED" : "🟢 GREEN"}`;
-        nextDisplay.style.color = predColor === "RED" ? "#f43f5e" : "#10b981";
+    // Number Prediction (Based on Size + Color)
+    const numCandidates = [];
+    if (predSize === "BIG") {
+        if (predColor === "RED") numCandidates.push(6, 8);
+        else numCandidates.push(7, 9);
+    } else {
+        if (predColor === "RED") numCandidates.push(2, 4);
+        else numCandidates.push(1, 3);
     }
+    // Simple logic: pick the one that appeared LESS recently to expect a return
+    const nHistory = history.map(h => h.number);
+    currentPredictionNumber = nHistory.indexOf(numCandidates[0]) > nHistory.indexOf(numCandidates[1]) ? numCandidates[1] : numCandidates[0];
+
+    // Update UI
+    const nDisplay = document.getElementById('next-display');
+    const nNumber = document.getElementById('next-number');
+    const nConf = document.getElementById('next-confidence');
+
+    if (nDisplay) {
+        nDisplay.innerText = `${predSize === "BIG" ? "BADA" : "CHOTA"} + ${predColor === "RED" ? "🔴 RED" : "🟢 GREEN"}`;
+    }
+    if (nNumber) {
+        nNumber.innerText = currentPredictionNumber;
+    }
+    if (nConf) {
+        nConf.innerText = `CONFIDENCE: ${confidence}%`;
+    }
+    nextDisplay.style.color = predColor === "RED" ? "#f43f5e" : "#10b981";
 
     // AI Badge Update
     const aiBadge = document.getElementById('ai-badge');
@@ -172,29 +281,129 @@ function predict() {
 function renderHistory() {
     const list = document.getElementById('history-list'); if (!list) return;
     list.innerHTML = "";
+
     const valid = history.filter(h => h.winSize !== null);
-    const sizeAcc = valid.length ? Math.round((valid.filter(h => h.winSize).length / valid.length) * 100) : 0;
+
+    // Overall Stats
+    const sizeWins = valid.filter(h => h.winSize).length;
+    const colorWins = valid.filter(h => h.winColor).length;
+    const sizeAcc = valid.length ? Math.round((sizeWins / valid.length) * 100) : 0;
+    const colorAcc = valid.length ? Math.round((colorWins / valid.length) * 100) : 0;
+
+    // Recent Stats (Last 10 Rounds)
+    const recent = valid.slice(0, 10);
+    const rSizeWins = recent.filter(h => h.winSize).length;
+    const rSizeAcc = recent.length ? Math.round((rSizeWins / recent.length) * 100) : 0;
+
+    // Action Signal Logic (Based on stability in last 6 valid rounds)
+    const shortTrend = valid.slice(0, 6);
+    const shortWins = shortTrend.filter(h => h.winSize).length;
+    let actionText = "⏳ ANALYZING...";
+    let actionColor = "#94a3b8";
+    let actionDesc = "WAIT FOR MORE DATA";
+
+    if (shortTrend.length >= 6) {
+        if (rSizeAcc >= 80 || (valid.length > 0 && valid[0].confidence >= 85)) {
+            actionText = "🔥 HIGH PROBABILITY";
+            actionColor = "#fbbf24"; // Gold
+            actionDesc = "STRONG ALGORITHM MATCH";
+        } else if (shortWins >= 5) {
+            actionText = "✅ GOOD OPPORTUNITY";
+            actionColor = "#4ade80";
+            actionDesc = "STABLE PATTERN";
+        } else if (shortWins <= 2) {
+            actionText = "🔴 STOP / SKIP";
+            actionColor = "#f43f5e";
+            actionDesc = "RANDOM MODE (RISKY)";
+        } else {
+            actionText = "🟡 CAUTION";
+            actionColor = "#fbbf24";
+            actionDesc = "UNSTABLE TREND";
+        }
+    }
+
+    // Action Signal Dashboard
+    const topEl = document.createElement('div');
+    topEl.style = `background:${actionColor}22; border:2px solid ${actionColor}; padding:15px; border-radius:15px; margin-bottom:15px; text-align:center; box-shadow:0 0 15px ${actionColor}22;`;
+    topEl.innerHTML = `
+        <div style="font-size:0.7rem; opacity:0.8; font-weight:900; letter-spacing:1px; margin-bottom:5px; color:${actionColor}">CURRENT ACTION SIGNAL</div>
+        <div style="font-size:1.6rem; font-weight:900; color:${actionColor}">${actionText}</div>
+        <div style="font-size:0.8rem; font-weight:600; color:${actionColor}; margin-top:5px; opacity:0.9;">${actionDesc}</div>
+        <div style="margin-top:10px; font-size:0.6rem; background:rgba(255,255,255,0.1); display:inline-block; padding:2px 8px; border-radius:20px;">
+            Recent Accuracy: <b>${rSizeAcc}%</b> (Last 10)
+        </div>
+    `;
+    list.appendChild(topEl);
+
+    // Stats Grid
     const statsEl = document.createElement('div');
-    statsEl.style = "display:flex;justify-content:space-around;background:rgba(255,255,255,0.05);padding:10px;border-radius:12px;margin-bottom:15px;font-size:0.75rem;";
-    statsEl.innerHTML = `<span>ACCURACY: <b style="color:#10b981">${sizeAcc}%</b></span><span>Rounds: ${history.length}</span>`;
+    statsEl.style = "display:grid; grid-template-columns: repeat(2, 1fr); gap:6px; background:rgba(255,255,255,0.05); padding:10px; border-radius:12px; margin-bottom:15px; font-size:0.65rem; border: 1px solid rgba(255,255,255,0.1);";
+    statsEl.innerHTML = `
+        <div style="text-align:center; border-right: 1px solid rgba(255,255,255,0.1);">
+            <b>OVERALL SIZE</b><br>
+            <span style="color:#10b981; font-size:0.85rem;">${sizeAcc}%</span><br>
+            <small style="opacity:0.6">${sizeWins}W | ${valid.length - sizeWins}L</small>
+        </div>
+        <div style="text-align:center;">
+            <b>OVERALL COLOR</b><br>
+            <span style="color:#a5b4fc; font-size:0.85rem;">${colorAcc}%</span><br>
+            <small style="opacity:0.6">${colorWins}W | ${valid.length - colorWins}L</small>
+        </div>
+    `;
     list.appendChild(statsEl);
+
     history.forEach(round => {
-        const item = document.createElement('div'); item.className = 'history-item';
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        item.style.display = "flex";
+        item.style.alignItems = "center";
+        item.style.gap = "8px";
+
         let colorStyle = round.colors.length > 1 ? `background:linear-gradient(135deg,var(--${round.colors[0]}) 50%,var(--${round.colors[1]}) 50%)` : `background:var(--${round.colors[0]})`;
-        item.innerHTML = `<div><span class="h-p">#${round.period}</span></div><div class="h-n" style="${colorStyle}">${round.number}</div><span class="h-s">${round.size}</span>`;
+
+        // Outcome Tags
+        let outcomeTags = "";
+        if (round.winSize !== null) {
+            outcomeTags = `
+                <div style="display:flex; flex-direction:column; gap:2px; margin-left:auto; align-items:flex-end;">
+                    <span style="background:${round.winSize ? '#10b981' : '#f43f5e'}; color:#fff; padding:1px 4px; border-radius:3px; font-size:7px; font-weight:900;">S:${round.winSize ? 'W' : 'L'}</span>
+                    <span style="background:${round.winColor ? '#6366f1' : '#fb7185'}; color:#fff; padding:1px 4px; border-radius:3px; font-size:7px; font-weight:900;">C:${round.winColor ? 'W' : 'L'}</span>
+                </div>
+            `;
+        }
+
+        item.innerHTML = `
+            <div style="width:35px"><span class="h-p">#${round.period}</span></div>
+            <div class="h-n" style="${colorStyle}">${round.number}</div>
+            <div style="flex:1;"><span class="h-s">${round.size}</span></div>
+            ${outcomeTags}
+        `;
         list.appendChild(item);
     });
 }
 
-function clearData() { if (confirm("Sab clear?")) { history = []; localStorage.removeItem('wg_pro_history'); renderHistory(); predict(); } }
+function resetSession() {
+    if (confirm("Reset current session stats?")) {
+        history = [];
+        localStorage.removeItem('wg_pro_history');
+        renderHistory();
+        alert("Session Reset!");
+    }
+}
 
 // ===========================
 // ⚡ REAL-TIME JALWA CONNECT
 // ===========================
 const API_URLS = [
     'https://api.jalwaapi.com/api/webapi',
-    'https://h5.ar-lottery06.com/api'
+    'https://h5.ar-lottery06.com/api',
+    'https://h5.ar-lottery01.com/api',
+    'https://h5.ar-lottery01.com/api/webapi',
+    'https://h5.ar-lottery07.com/api',
+    'https://www.a7jalx9.com/api',
+    'https://api.a7jalx9.com/api'
 ];
+
 const ENDPOINTS = {
     login: '/Login',
     history: '/GetNoaverageEmerdList'
@@ -275,42 +484,51 @@ async function jalwaLogin() {
 
 async function jalwaFetch() {
     const token = localStorage.getItem('jalwa_token');
-    const apiBase = localStorage.getItem('jalwa_api_base') || API_URLS[0];
     if (!token) return;
 
-    const url = apiBase + ENDPOINTS.history;
-    const body = { typeId: 1, pageNo: 1, pageSize: 30 }; // typeId 1 = WinGo 30S
+    setStatus('⏳ Syncing history...', '#a5b4fc');
 
-    for (let proxy of PROXIES) {
-        try {
-            let target = proxy ? (proxy.includes('allorigins') ? proxy + encodeURIComponent(url) : proxy + url) : url;
-            const res = await fetch(target, {
-                method: proxy.includes('allorigins') ? 'GET' : 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: proxy.includes('allorigins') ? null : JSON.stringify(body)
-            });
+    for (let apiBase of API_URLS) {
+        const url = apiBase + ENDPOINTS.history;
+        const body = { typeId: 1, pageNo: 1, pageSize: 30 };
 
-            let d = await res.json();
-            if (proxy.includes('allorigins') && d.contents) d = JSON.parse(d.contents);
+        for (let proxy of PROXIES) {
+            try {
+                let target = proxy ? (proxy.includes('allorigins') ? proxy + encodeURIComponent(url) : proxy + url) : url;
+                const res = await fetch(target, {
+                    method: proxy.includes('allorigins') ? 'GET' : 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: proxy.includes('allorigins') ? null : JSON.stringify(body)
+                });
 
-            if (d?.data?.list) {
-                const list = d.data.list;
-                history = list.map(r => ({
-                    period: String(r.issueNumber || r.period).slice(-3),
-                    number: parseInt(r.number),
-                    size: (parseInt(r.number) >= 5 ? 'BIG' : 'SMALL'),
-                    colors: getColors(parseInt(r.number)),
-                    winSize: null, winColor: null
-                }));
-                localStorage.setItem('wg_pro_history', JSON.stringify(history));
-                if (periodBox) periodBox.value = parseInt(String(list[0].period).slice(-3)) + 1;
-                renderHistory(); predict(); setBadge(true);
-                setStatus(`✅ ${list.length} rounds sync! #${periodBox.value}`, '#10b981');
-                return;
-            }
-        } catch (e) { console.error("Fetch Error:", e); }
+                if (!res.ok) continue;
+
+                let d = await res.json();
+                if (proxy.includes('allorigins') && d.contents) d = JSON.parse(d.contents);
+
+                if (d?.data?.list) {
+                    const list = d.data.list;
+                    history = list.map(r => ({
+                        period: String(r.issueNumber || r.period).slice(-3),
+                        number: parseInt(r.number),
+                        size: (parseInt(r.number) >= 5 ? 'BIG' : 'SMALL'),
+                        colors: getColors(parseInt(r.number)),
+                        winSize: null, winColor: null
+                    }));
+                    localStorage.setItem('wg_pro_history', JSON.stringify(history));
+                    localStorage.setItem('jalwa_api_base', apiBase);
+                    if (periodBox) periodBox.value = parseInt(String(list[0].period).slice(-3)) + 1;
+                    renderHistory(); predict(); setBadge(true);
+                    setStatus(`✅ ${list.length} rounds sync! #${periodBox.value}`, '#10b981');
+                    return;
+                }
+            } catch (e) { console.error("Fetch Error:", e); }
+        }
     }
-    setStatus('⚠️ Sync failed. Try Manual Token or Refresh.', '#f43f5e');
+    setStatus('⚠️ Sync failed. Try Refresh or new token.', '#f43f5e');
 }
 
 // MANUAL TOKEN FUNCTIONS

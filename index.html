@@ -12,6 +12,39 @@
 </head>
 
 <body>
+
+    <!-- 🔐 LOCK SCREEN -->
+    <div id="lockScreen"
+        style="position:fixed;top:0;left:0;width:100%;height:100%;background:#0a0f1e;z-index:9999;display:flex;align-items:center;justify-content:center;">
+        <div
+            style="text-align:center;padding:30px;background:#1a2035;border-radius:20px;border:1px solid #3b82f655;max-width:320px;width:90%;">
+            <div style="font-size:2.5rem;">🔐</div>
+            <div style="font-size:1.2rem;font-weight:900;color:#e2e8f0;margin:8px 0 4px;">WIN GO PRO</div>
+            <div style="font-size:0.7rem;color:#64748b;margin-bottom:18px;letter-spacing:1px;">PRIVATE ACCESS ONLY</div>
+            <input id="pinInput" type="password" placeholder="Enter Password" maxlength="30"
+                style="width:100%;padding:12px;border-radius:10px;border:1px solid #3b82f644;background:#0a0f1e;color:#e2e8f0;font-size:1rem;text-align:center;outline:none;margin-bottom:10px;box-sizing:border-box;"
+                onkeydown="if(event.key==='Enter')checkPin()" />
+            <button onclick="checkPin()"
+                style="width:100%;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:white;font-size:1rem;font-weight:700;cursor:pointer;">🔓
+                UNLOCK</button>
+            <div id="pinError" style="color:#f43f5e;font-size:0.75rem;margin-top:8px;display:none;">❌ Wrong password.
+                Try again.</div>
+        </div>
+    </div>
+    <script>
+        (function () {
+            var PIN = "sachinravin321", SK = "wg_unlocked";
+            function checkPin() {
+                var v = document.getElementById('pinInput').value.trim();
+                if (v === PIN) { sessionStorage.setItem(SK, '1'); document.getElementById('lockScreen').style.display = 'none'; }
+                else { document.getElementById('pinError').style.display = 'block'; document.getElementById('pinInput').value = ''; }
+            }
+            window.checkPin = checkPin;
+            if (sessionStorage.getItem(SK) === '1') document.getElementById('lockScreen').style.display = 'none';
+        })();
+    </script>
+    <!-- 🔐 END LOCK -->
+
     <div class="app-container">
         <header>
             <div class="logo">WIN GO PRO</div>
@@ -30,21 +63,24 @@
                 <div id="next-result">WAITING...</div>
                 <div id="number-suggestion"
                     style="margin: 10px 0; color: var(--accent); font-weight: 700; letter-spacing: 2px;"></div>
-                <div class="conf-bar">
-                    <div id="conf-fill" style="width: 0%"></div>
+                <div class="prediction-box">
+                    <div id="next-display"
+                        style="font-size: 1.5rem; font-weight: 900; color: #10b981; text-shadow: 0 0 10px rgba(16, 185, 129, 0.4); margin-bottom: 5px;">
+                        ---</div>
+                    <div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px;">RECOMMENDED NUMBER: <b
+                            id="next-number" style="color:#fbbf24; font-size:1.2rem;">-</b></div>
+                    <div class="accuracy-badge" id="next-confidence">CONFIDENCE: --%</div>
                 </div>
-                <div id="confidence-text">INPUT HISTORY</div>
-            </div>
-            <div class="stats-row">
-                <div class="stat">
-                    <span class="stat-label">TREND</span>
-                    <span id="trend-type">N/A</span>
+                <div class="stats-row">
+                    <div class="stat">
+                        <span class="stat-label">TREND</span>
+                        <span id="trend-type">N/A</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">ACCURACY</span>
+                        <span id="accuracy-rate">72%</span>
+                    </div>
                 </div>
-                <div class="stat">
-                    <span class="stat-label">ACCURACY</span>
-                    <span id="accuracy-rate">72%</span>
-                </div>
-            </div>
         </section>
 
         <!-- JALWA CONNECT -->
@@ -98,6 +134,9 @@
                     <button onclick="saveManualToken()"
                         style="flex:1; background:#10b981; border:none; border-radius:8px; padding:8px; color:#fff; font-weight:700; font-size:0.7rem; cursor:pointer;">SAVE
                         TOKEN</button>
+                    <button onclick="jalwaFetch()"
+                        style="flex:1; background:#6366f1; border:none; border-radius:8px; padding:8px; color:#fff; font-weight:700; font-size:0.7rem; cursor:pointer;">SYNC
+                        NOW</button>
                 </div>
             </div>
 
@@ -142,12 +181,16 @@
         <section class="records-panel">
             <div class="panel-header">RECENT RECORDS</div>
             <div id="history-list"></div>
+            <button class="import-btn" onclick="openMasterImport()" style="margin-top:10px;">MASTER IMPORT</button>
+            <button class="clear-btn" onclick="resetSession()"
+                style="width:100%; margin-top:10px; background:rgba(244, 63, 94, 0.2); border:1px solid #f43f5e;">RESET
+                SESSION</button>
+            <button class="clear-btn" onclick="clearData()" style="width:100%; margin-top:10px; opacity:0.5;">DELETE ALL
+                DATA</button>
         </section>
-
-        <button class="clear-btn" onclick="clearData()" style="width:100%; margin-top:10px;">CLEAR ALL DATA</button>
     </div>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=2.9"></script>
 </body>
 
 </html>

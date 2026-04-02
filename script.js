@@ -1,4 +1,36 @@
+// --- CHROME EXTENSION AUTO-IMPORT ---
+(function () {
+    const params = new URLSearchParams(window.location.search);
+    const importParam = params.get('import');
+    if (importParam) {
+        try {
+            const nums = importParam.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n >= 0 && n <= 9);
+            if (nums.length > 0) {
+                const existing = JSON.parse(localStorage.getItem('wg_pro_history') || '[]');
+                const newEntries = nums.map((num, i) => ({
+                    period: `EXT-${Date.now()}-${i}`,
+                    number: num,
+                    color: (num === 0 || num === 5) ? 'VIOLET' : (num % 2 === 0 ? 'GREEN' : 'RED'),
+                    size: num >= 5 ? 'BIG' : 'SMALL',
+                    winSize: null,
+                    winColor: null,
+                    predSize: null,
+                    predColor: null,
+                    confidence: null,
+                }));
+                // Merge new entries at front (most recent first)
+                const merged = [...newEntries, ...existing].slice(0, 100);
+                localStorage.setItem('wg_pro_history', JSON.stringify(merged));
+                // Clean URL without params
+                window.history.replaceState({}, document.title, window.location.pathname);
+                console.log(`[WinGo Ext] Imported ${nums.length} results from extension.`);
+            }
+        } catch (e) { console.warn('[WinGo Ext] Import error:', e); }
+    }
+})();
+
 let history = JSON.parse(localStorage.getItem('wg_pro_history') || '[]');
+
 
 // DOM Elements
 const periodBox = document.getElementById('period-box');
@@ -136,20 +168,21 @@ function predict() {
     // Advanced Size Prediction (BIG/SMALL)
     const sizeStreak = getStreak(s);
     const sizeZigZag = isZigZag(s, 4);
+    const sizeMirror = isMirror(s);
 
     // --- DEEP LOGIC: REVERSE ENGINEERING FACTORS ---
 
     // 1. Violet Shift (0/5 Logic) - Common trend flipper
     const violetEffect = (s.length > 0 && (history[0].number === 0 || history[0].number === 5));
 
-    // 2. Regression to Mean (Overall Balance)
-    const validRounds = history.filter(h => h.winSize !== null);
-    const totalBig = validRounds.filter(h => h.size === "BIG").length;
-    const sizeSkew = validRounds.length > 10 ? (totalBig / validRounds.length) : 0.5;
+    // 2. Regression to Mean (Overall Balance - Context from long term history)
+    const totalBigGlobal = s.filter(size => size === "BIG").length;
+    const sizeSkew = s.length > 10 ? (totalBigGlobal / s.length) : 0.5;
 
     // 3. Parity Analysis (Odd/Even)
     const isOdd = (num) => num % 2 !== 0;
     const p = history.map(h => isOdd(h.number) ? "ODD" : "EVEN");
+    const parityStreak = getStreak(p);
 
     // 4. Vertical Trap (Search for 3x same number or size in 5 rounds)
     const verticalMatch = (s.length >= 5 && s[0] === s[2] && s[2] === s[4]);
@@ -201,24 +234,29 @@ function predict() {
     if (sizeStreak >= 10) confidence = 95;
     if (confidence > 98) confidence = 98;
 
-    else if (sizeSkew > 0.65) {
+    else if (sizeSkew > 0.60) {
         // High BIG density -> SMALL is due
         predSize = "SMALL";
         confidence = 80;
         type = "SKEW-CORRECT";
     }
-    else if (sizeSkew < 0.35) {
+    else if (sizeSkew < 0.40) {
         // High SMALL density -> BIG is due
         predSize = "BIG";
         confidence = 80;
         type = "SKEW-CORRECT";
     }
     else {
-        // Default AI Frequency + Parity weight
-        const parityBias = p[0] === "ODD" ? "SMALL" : "BIG"; // Common correlation
+        // Default AI Frequency + Parity Pattern Reversion
+        if (parityStreak >= 3) {
+            predColor = p[0] === "ODD" ? "RED" : "GREEN"; // Balance expected shift
+            type = "PARITY-REVERSION";
+            confidence = 72;
+        } else {
+            type = "DEEP-LOGIC";
+            confidence = 65 + Math.abs(ai.big - 50);
+        }
         predSize = ai.big > 50 ? "BIG" : "SMALL";
-        confidence = 65 + Math.abs(ai.big - 50);
-        type = "DEEP-LOGIC";
     }
 
 
@@ -227,18 +265,45 @@ function predict() {
     currentPredictionSize = predSize;
     currentPredictionColor = predColor;
 
-    // Number Prediction (Based on Size + Color)
+    // Number Saturation & Frequency Analysis
+    const nHistory = history.map(h => h.number);
+    const numberCounts = Array(10).fill(0);
+    const numberLastSeen = Array(10).fill(999);
+    for (let i = 0; i <= 9; i++) {
+        let idx = nHistory.indexOf(i);
+        numberLastSeen[i] = idx === -1 ? 999 : idx;
+    }
+    nHistory.forEach(num => numberCounts[num]++);
+
+    // Update Hot / Due numbers in UI
+    const sortedHot = [...Array(10).keys()].sort((a,b) => numberCounts[b] - numberCounts[a]);
+    const sortedDue = [...Array(10).keys()].sort((a,b) => numberLastSeen[b] - numberLastSeen[a]);
+    
+    const hotEl = document.getElementById('hot-numbers');
+    const dueEl = document.getElementById('due-numbers');
+    if (hotEl) hotEl.innerText = `${sortedHot[0]}, ${sortedHot[1]}, ${sortedHot[2]}`;
+    if (dueEl) dueEl.innerText = `${sortedDue[0]}, ${sortedDue[1]}, ${sortedDue[2]}`;
+
+    // Number Prediction (Based on Size + Color + Saturation)
     const numCandidates = [];
     if (predSize === "BIG") {
         if (predColor === "RED") numCandidates.push(6, 8);
-        else numCandidates.push(7, 9);
+        else if (predColor === "GREEN") numCandidates.push(7, 9);
+        else numCandidates.push(5);
     } else {
         if (predColor === "RED") numCandidates.push(2, 4);
-        else numCandidates.push(1, 3);
+        else if (predColor === "GREEN") numCandidates.push(1, 3);
+        else numCandidates.push(0);
     }
-    // Simple logic: pick the one that appeared LESS recently to expect a return
-    const nHistory = history.map(h => h.number);
-    currentPredictionNumber = nHistory.indexOf(numCandidates[0]) > nHistory.indexOf(numCandidates[1]) ? numCandidates[1] : numCandidates[0];
+    
+    if (numCandidates.length === 0) {
+        if (predSize === "BIG") numCandidates.push(6, 7, 8, 9);
+        else numCandidates.push(1, 2, 3, 4);
+    }
+
+    // Pick the most DUE number among candidates
+    numCandidates.sort((a, b) => numberLastSeen[b] - numberLastSeen[a]);
+    currentPredictionNumber = numCandidates[0];
 
     // Update UI
     const nDisplay = document.getElementById('next-display');

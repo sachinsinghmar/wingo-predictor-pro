@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Win Go Predictor - Jalwa Sync",
+  "version": "1.0",
+  "description": "Automatically syncs Jalwa Win Go history to Win Go Predictor Pro",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*.jalwa.game/*",
+    "https://*.a7jalx9.com/*",
+    "https://*.ar-lottery01.com/*",
+    "https://sachinsinghmar.github.io/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icon.png"
+    },
+    "default_title": "Win Go Sync"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.jalwa.game/*",
+        "https://*.a7jalx9.com/*",
+        "https://*.ar-lottery01.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "48": "icon.png"
+  }
+}

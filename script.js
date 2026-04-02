@@ -8,9 +8,9 @@
             if (nums.length > 0) {
                 const existing = JSON.parse(localStorage.getItem('wg_pro_history') || '[]');
                 const newEntries = nums.map((num, i) => ({
-                    period: `EXT-${Date.now()}-${i}`,
+                    period: `EXT-${String(Date.now()).slice(-4)}-${i}`,
                     number: num,
-                    color: (num === 0 || num === 5) ? 'VIOLET' : (num % 2 === 0 ? 'GREEN' : 'RED'),
+                    colors: (num === 0) ? ['red', 'violet'] : (num === 5) ? ['green', 'violet'] : (num % 2 === 0 ? ['red'] : ['green']),
                     size: num >= 5 ? 'BIG' : 'SMALL',
                     winSize: null,
                     winColor: null,
@@ -418,6 +418,9 @@ function renderHistory() {
     list.appendChild(statsEl);
 
     history.forEach(round => {
+        if (!round.colors) {
+            round.colors = (round.number === 0) ? ['red', 'violet'] : (round.number === 5) ? ['green', 'violet'] : (round.number % 2 === 0 ? ['red'] : ['green']);
+        }
         const item = document.createElement('div');
         item.className = 'history-item';
         item.style.display = "flex";
